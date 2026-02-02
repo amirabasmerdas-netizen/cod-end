@@ -6,8 +6,8 @@ services:
     startCommand: python bot.py
     envVars:
       - key: PORT
-        value: 8443
+        value: 10000
       - key: WEBHOOK_URL
-        sync: false  # باید در Render تنظیم شود
-    healthCheckPath: /health
+        generateValue: true  # Render خودش آدرس را می‌سازد
+    healthCheckPath: /
     autoDeploy: true
