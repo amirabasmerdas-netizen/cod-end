@@ -7,7 +7,7 @@ services:
     envVars:
       - key: PORT
         value: 10000
-      - key: WEBHOOK_URL
-        generateValue: true  # Render خودش آدرس را می‌سازد
+      - key: PYTHON_VERSION
+        value: 3.9.0
     healthCheckPath: /
     autoDeploy: true
