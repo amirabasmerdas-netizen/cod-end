@@ -12,7 +12,7 @@ import os
 from flask import Flask, request
 
 # ========= تنظیمات =========
-TOKEN = "7918632227:AAFnbQ_zkWDNwdbZJLNfjgzGtH3U0mCNY1E"
+TOKEN = "8579047095:AAFo1-717MctvpS0fCPccw16QazL7roZ18Y"
 ADMINS = [601668306, 8588773170]  # آیدی عددی ادمین‌ها
 PORT = int(os.environ.get('PORT', 5000))
 WEBHOOK_URL = os.environ.get('WEBHOOK_URL', '')
