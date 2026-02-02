@@ -9,23 +9,13 @@ from telegram.ext import (
 )
 import sqlite3
 import os
-import logging
-import asyncio
+from flask import Flask, request
 
 # ========= تنظیمات =========
-TOKEN = "8574884910:AAFFID6HrOcElqnJTBHZLQ3W_56gFQ_IKaA"
+TOKEN = "7918632227:AAGdu_PHP2bJVEZRRt2T6IlWU3B_xokPKzA"
 ADMINS = [601668306, 8588773170]  # آیدی عددی ادمین‌ها
-
-# تنظیمات وب‌هوک - برای Render
-PORT = int(os.environ.get('PORT', 10000))  # پورت پیش‌فرض Render 10000
-WEBHOOK_URL = os.environ.get('WEBHOOK_URL', '')  # در Render تنظیم می‌شود
-
-# فعال‌سازی لاگ‌گیری
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+PORT = int(os.environ.get('PORT', 5000))
+WEBHOOK_URL = os.environ.get('WEBHOOK_URL', '')
 
 # ========= دیتابیس =========
 db = sqlite3.connect("db.sqlite", check_same_thread=False)
@@ -75,16 +65,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [
             InlineKeyboardButton("▶️ شروع فورواد", callback_data="start_fw"),
             InlineKeyboardButton("⏹ توقف فورواد", callback_data="stop_fw")
-        ],
-        [
-            InlineKeyboardButton("📊 وضعیت", callback_data="status")
         ]
     ]
 
     await update.message.reply_text(
-        "🎛 پنل مدیریت ربات\n\n"
-        f"📱 حالت: {'🟢 وب‌هوک' if WEBHOOK_URL else '🔵 Polling'}\n"
-        f"🌐 پورت: {PORT}",
+        "🎛 پنل مدیریت ربات",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -111,54 +96,6 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "stop_fw":
         save_settings(active=0)
         await query.edit_message_text("⛔ فورواد متوقف شد")
-    
-    elif query.data == "status":
-        source, target, active = get_settings()
-        status_text = "📊 وضعیت ربات:\n\n"
-        status_text += f"🎯 وضعیت فورواد: {'🟢 فعال' if active else '🔴 غیرفعال'}\n"
-        status_text += f"🌐 حالت اجرا: {'🟢 وب‌هوک' if WEBHOOK_URL else '🔵 Polling'}\n"
-        
-        if source:
-            try:
-                chat = await context.bot.get_chat(source)
-                status_text += f"📥 گروه: {chat.title}\n"
-            except:
-                status_text += "📥 گروه: ⚠️ خطا در دریافت\n"
-        else:
-            status_text += "📥 گروه: ⭕ تنظیم نشده\n"
-            
-        if target:
-            try:
-                chat = await context.bot.get_chat(target)
-                status_text += f"📤 چنل: {chat.title}\n"
-            except:
-                status_text += "📤 چنل: ⚠️ خطا در دریافت\n"
-        else:
-            status_text += "📤 چنل: ⭕ تنظیم نشده\n"
-            
-        await query.edit_message_text(
-            status_text,
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 بازگشت", callback_data="back")]])
-        )
-    
-    elif query.data == "back":
-        keyboard = [
-            [
-                InlineKeyboardButton("📥 تنظیم گروه", callback_data="set_group"),
-                InlineKeyboardButton("📤 تنظیم چنل", callback_data="set_channel")
-            ],
-            [
-                InlineKeyboardButton("▶️ شروع فورواد", callback_data="start_fw"),
-                InlineKeyboardButton("⏹ توقف فورواد", callback_data="stop_fw")
-            ],
-            [
-                InlineKeyboardButton("📊 وضعیت", callback_data="status")
-            ]
-        ]
-        await query.edit_message_text(
-            "🎛 پنل مدیریت ربات",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
 
 # ========= گرفتن @username (فقط چت خصوصی) =========
 async def capture_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -218,42 +155,39 @@ async def forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await update.message.forward(chat_id=target)
     except Exception as e:
-        logger.error(f"Forward error: {e}")
+        print("Forward error:", e)
 
-# ========= اجرا =========
-def main():
-    # ساخت اپلیکیشن
-    application = ApplicationBuilder().token(TOKEN).build()
+# ========= راه‌اندازی وب‌هوک =========
+app = ApplicationBuilder().token(TOKEN).build()
 
-    # اضافه کردن handlerها
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(buttons))
-    application.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, capture_username))
-    application.add_handler(MessageHandler(filters.ALL & filters.ChatType.GROUPS, forward))
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CallbackQueryHandler(buttons))
 
-    # اجرا با توجه به وضعیت
+# فقط پیام متنی در چت خصوصی برای تنظیم
+app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, capture_username))
+
+# فورواد همه پیام‌ها از گروه
+app.add_handler(MessageHandler(filters.ALL & filters.ChatType.GROUPS, forward))
+
+# ایجاد برنامه Flask برای وب‌هوک
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def index():
+    return "Bot is running!"
+
+@flask_app.route(f'/{TOKEN}', methods=['POST'])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), app.bot)
+    app.update_queue.put(update)
+    return 'ok'
+
+if __name__ == '__main__':
+    # تنظیم وب‌هوک اگر آدرس مشخص شده باشد
     if WEBHOOK_URL:
-        logger.info(f"Starting in WEBHOOK mode on port {PORT}")
-        logger.info(f"Webhook URL: {WEBHOOK_URL}")
-        
-        # تنظیم و اجرای وب‌هوک
-        async def set_webhook():
-            await application.bot.set_webhook(
-                url=f"{WEBHOOK_URL}/{TOKEN}",
-                secret_token=TOKEN[:16]
-            )
-            logger.info("Webhook set successfully")
-        
-        # اجرای وب‌هوک
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
-            secret_token=TOKEN[:16]
-        )
+        app.bot.set_webhook(url=f'{WEBHOOK_URL}/{TOKEN}')
+        print(f"Webhook set to: {WEBHOOK_URL}/{TOKEN}")
     else:
-        logger.info("Starting in POLLING mode")
-        application.run_polling()
-
-if __name__ == "__main__":
-    main()
+        print("Running in polling mode (webhook not set)")
+    
+    flask_app.run(host='0.0.0.0', port=PORT)
