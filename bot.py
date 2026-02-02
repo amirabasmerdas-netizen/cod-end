@@ -1,3 +1,4 @@
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -8,14 +9,13 @@ from telegram.ext import (
     filters
 )
 import sqlite3
-import os
 
-# ========= تنظیمات =========
-TOKEN = "8579047095:AAFo1-717MctvpS0fCPccw16QazL7roZ18Y"
-ADMINS = [601668306, 8588773170]  # آیدی عددی ادمین‌ها
-WEBHOOK_URL = "https://cod-end.onrender.com"  # <--- اینو با آدرس رندر خودت عوض کن
+# ======== تنظیمات ========
+TOKEN = "8574884910:AAFFID6HrOcElqnJTBHZLQ3W_56gFQ_IKaA"
+WEBHOOK_URL = "https://cod-end.onrender.com"  # آدرس رندر خودت
+ADMINS = [601668306, 8588773170]
 
-# ========= دیتابیس =========
+# ======== دیتابیس ========
 db = sqlite3.connect("db.sqlite", check_same_thread=False)
 cur = db.cursor()
 
@@ -49,7 +49,7 @@ def save_settings(source=None, target=None, active=None):
     ))
     db.commit()
 
-# ========= /start → پنل =========
+# ======== پنل و دکمه‌ها ========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("❌ دسترسی نداری")
@@ -65,13 +65,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("⏹ توقف فورواد", callback_data="stop_fw")
         ]
     ]
+    await update.message.reply_text("🎛 پنل مدیریت ربات", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    await update.message.reply_text(
-        "🎛 پنل مدیریت ربات",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-# ========= دکمه‌ها =========
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -82,25 +77,18 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "set_group":
         context.user_data["mode"] = "set_group"
         await query.edit_message_text("📥 یوزرنیم گروه را ارسال کن (مثال: @mygroup)")
-
     elif query.data == "set_channel":
         context.user_data["mode"] = "set_channel"
         await query.edit_message_text("📤 یوزرنیم چنل را ارسال کن (مثال: @mychannel)")
-
     elif query.data == "start_fw":
         save_settings(active=1)
         await query.edit_message_text("✅ فورواد فعال شد")
-
     elif query.data == "stop_fw":
         save_settings(active=0)
         await query.edit_message_text("⏹ فورواد متوقف شد")
 
-# ========= گرفتن @username (فقط چت خصوصی) =========
 async def capture_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        return
-
-    if update.message.chat.type != "private":
+    if not is_admin(update.effective_user.id) or update.message.chat.type != "private":
         return
 
     mode = context.user_data.get("mode")
@@ -122,63 +110,38 @@ async def capture_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if chat.type not in ["group", "supergroup"]:
             await update.message.reply_text("❌ این یوزرنیم گروه نیست")
             return
-
         save_settings(source=chat.id)
         context.user_data["mode"] = None
-        await update.message.reply_text(
-            f"✅ گروه «{chat.title}» با موفقیت وصل شد"
-        )
-
+        await update.message.reply_text(f"✅ گروه «{chat.title}» با موفقیت وصل شد")
     elif mode == "set_channel":
         if chat.type != "channel":
             await update.message.reply_text("❌ این یوزرنیم چنل نیست")
             return
-
         save_settings(target=chat.id)
         context.user_data["mode"] = None
-        await update.message.reply_text(
-            f"✅ چنل «{chat.title}» با موفقیت وصل شد"
-        )
+        await update.message.reply_text(f"✅ چنل «{chat.title}» با موفقیت وصل شد")
 
-# ========= فورواد همه پیام‌ها =========
 async def forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     source, target, active = get_settings()
-
-    if not active or not update.message:
+    if not active or not update.message or update.message.chat_id != source:
         return
-
-    if update.message.chat_id != source:
-        return
-
     try:
         await update.message.forward(chat_id=target)
     except Exception as e:
         print("Forward error:", e)
 
-# ========= اجرا با وب‌هوک =========
-from aiohttp import web
-
-async def handle(request):
-    update = Update.de_json(await request.json(), app.bot)
-    await app.update_queue.put(update)
-    return web.Response(text="ok")
+# ======== اجرا وب‌هوک ========
+PORT = int(os.environ.get("PORT", 8443))
 
 app = ApplicationBuilder().token(TOKEN).build()
-
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CallbackQueryHandler(buttons))
 app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, capture_username))
 app.add_handler(MessageHandler(filters.ALL & filters.ChatType.GROUPS, forward))
 
-# وب‌هوک روی پورت رندر
-PORT = int(os.environ.get("PORT", 8443))
-web_app = web.Application()
-web_app.router.add_post(f"/{TOKEN}", handle)
-
 print("Bot is running on webhook...")
+
 app.run_webhook(
-    webhook_path=f"/{TOKEN}",
-    webhook_app=web_app,
     listen="0.0.0.0",
     port=PORT,
     url_path=TOKEN,
