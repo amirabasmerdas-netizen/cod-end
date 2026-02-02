@@ -1,6 +1,3 @@
-import os
-import sqlite3
-import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -10,20 +7,13 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
+import sqlite3
+import os
 
 # ========= تنظیمات =========
-TOKEN = os.environ.get("BOT_TOKEN")
-if not TOKEN:
-    raise ValueError("لطفا متغیر محیطی BOT_TOKEN را ست کنید")
-
-ADMINS = [601668306, 8588773170]
-
-# ========= logging =========
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+TOKEN = "8579047095:AAFo1-717MctvpS0fCPccw16QazL7roZ18Y"
+ADMINS = [601668306, 8588773170]  # آیدی عددی ادمین‌ها
+WEBHOOK_URL = "https://cod-end.onrender.com"  # <--- اینو با آدرس رندر خودت عوض کن
 
 # ========= دیتابیس =========
 db = sqlite3.connect("db.sqlite", check_same_thread=False)
@@ -124,9 +114,8 @@ async def capture_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         chat = await context.bot.get_chat(text)
-    except Exception as e:
+    except:
         await update.message.reply_text("❌ پیدا نشد یا ربات دسترسی ندارد")
-        logger.error("Error getting chat: %s", e)
         return
 
     if mode == "set_group":
@@ -136,7 +125,9 @@ async def capture_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         save_settings(source=chat.id)
         context.user_data["mode"] = None
-        await update.message.reply_text(f"✅ گروه «{chat.title}» با موفقیت وصل شد")
+        await update.message.reply_text(
+            f"✅ گروه «{chat.title}» با موفقیت وصل شد"
+        )
 
     elif mode == "set_channel":
         if chat.type != "channel":
@@ -145,33 +136,51 @@ async def capture_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         save_settings(target=chat.id)
         context.user_data["mode"] = None
-        await update.message.reply_text(f"✅ چنل «{chat.title}» با موفقیت وصل شد")
+        await update.message.reply_text(
+            f"✅ چنل «{chat.title}» با موفقیت وصل شد"
+        )
 
 # ========= فورواد همه پیام‌ها =========
 async def forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     source, target, active = get_settings()
+
     if not active or not update.message:
         return
+
     if update.message.chat_id != source:
         return
+
     try:
         await update.message.forward(chat_id=target)
     except Exception as e:
-        logger.error("Forward error: %s", e)
+        print("Forward error:", e)
 
-# ========= راه‌اندازی ربات =========
-async def main():
-    app = ApplicationBuilder().token(TOKEN).build()
+# ========= اجرا با وب‌هوک =========
+from aiohttp import web
 
-    # handlers
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(buttons))
-    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, capture_username))
-    app.add_handler(MessageHandler(filters.ALL & filters.ChatType.GROUPS, forward))
+async def handle(request):
+    update = Update.de_json(await request.json(), app.bot)
+    await app.update_queue.put(update)
+    return web.Response(text="ok")
 
-    # polling (برای تست محلی راحت)
-    await app.run_polling()
+app = ApplicationBuilder().token(TOKEN).build()
 
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CallbackQueryHandler(buttons))
+app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, capture_username))
+app.add_handler(MessageHandler(filters.ALL & filters.ChatType.GROUPS, forward))
+
+# وب‌هوک روی پورت رندر
+PORT = int(os.environ.get("PORT", 8443))
+web_app = web.Application()
+web_app.router.add_post(f"/{TOKEN}", handle)
+
+print("Bot is running on webhook...")
+app.run_webhook(
+    webhook_path=f"/{TOKEN}",
+    webhook_app=web_app,
+    listen="0.0.0.0",
+    port=PORT,
+    url_path=TOKEN,
+    webhook_url=f"{WEBHOOK_URL}/{TOKEN}"
+)
