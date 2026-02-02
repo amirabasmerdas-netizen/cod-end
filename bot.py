@@ -12,7 +12,7 @@ import os
 import logging
 
 # ========= تنظیمات =========
-TOKEN = "8574884910:AAFFID6HrOcElqnJTBHZLQ3W_56gFQ_IKaA"
+TOKEN = "7918632227:AAGdu_PHP2bJVEZRRt2T6IlWU3B_xokPKzA"
 ADMINS = [601668306, 8588773170]  # آیدی عددی ادمین‌ها
 
 # تنظیمات وب‌هوک - برای Render
