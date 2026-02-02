@@ -12,13 +12,13 @@ import os
 import logging
 
 # ========= تنظیمات =========
-TOKEN = "7918632227:AAGdu_PHP2bJVEZRRt2T6IlWU3B_xokPKzA"
+TOKEN = "8574884910:AAFFID6HrOcElqnJTBHZLQ3W_56gFQ_IKaA"
 ADMINS = [601668306, 8588773170]  # آیدی عددی ادمین‌ها
 
 # تنظیمات وب‌هوک - برای Render
 PORT = int(os.environ.get('PORT', 8443))  # پورت پیش‌فرض Render
 WEBHOOK_URL = os.environ.get('WEBHOOK_URL', '')  # در Render تنظیم می‌شود
-WEBHOOK_PATH = f"/{TOKEN}"  # مسیر وب‌هوک
+WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET', TOKEN[:16])  # رمز امنیتی
 
 # فعال‌سازی لاگ‌گیری
 logging.basicConfig(
@@ -116,6 +116,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         source, target, active = get_settings()
         status_text = "📊 وضعیت ربات:\n\n"
         status_text += f"🎯 وضعیت فورواد: {'🟢 فعال' if active else '🔴 غیرفعال'}\n"
+        status_text += f"🌐 حالت اجرا: {'🟢 وب‌هوک' if WEBHOOK_URL else '🔵 Polling'}\n"
         
         if source:
             try:
@@ -219,16 +220,6 @@ async def forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Forward error: {e}")
 
-# ========= تابع راه‌اندازی وب‌هوک =========
-async def setup_webhook(application):
-    if WEBHOOK_URL:
-        webhook_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
-        await application.bot.set_webhook(url=webhook_url)
-        logger.info(f"Webhook set to: {webhook_url}")
-    else:
-        await application.bot.delete_webhook()
-        logger.info("Running in polling mode")
-
 # ========= اجرا =========
 def main():
     # ساخت اپلیکیشن
@@ -240,23 +231,22 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.PRIVATE, capture_username))
     app.add_handler(MessageHandler(filters.ALL & filters.ChatType.GROUPS, forward))
 
-    # تنظیم وب‌هوک
+    # اجرا با توجه به وضعیت
     if WEBHOOK_URL:
-        # حالت وب‌هوک برای Render
-        from telegram.ext import Defaults
+        logger.info(f"Starting in WEBHOOK mode on port {PORT}")
+        logger.info(f"Webhook URL: {WEBHOOK_URL}")
         
-        logger.info("Starting in webhook mode...")
+        # اجرای وب‌هوک
         app.run_webhook(
             listen="0.0.0.0",
             port=PORT,
-            webhook_url=WEBHOOK_URL + WEBHOOK_PATH,
-            secret_token=TOKEN[:16],  # رمز امنیتی برای وب‌هوک
-            drop_pending_updates=True
+            url_path=TOKEN,  # مسیر وب‌هوک
+            webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
+            secret_token=WEBHOOK_SECRET
         )
     else:
-        # حالت Polling برای اجرای محلی
-        logger.info("Starting in polling mode...")
-        app.run_polling(drop_pending_updates=True)
+        logger.info("Starting in POLLING mode")
+        app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
